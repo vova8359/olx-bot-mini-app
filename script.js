@@ -1,432 +1,323 @@
-// Головний скрипт міні-додатку
-let currentAccountId = null;
-let currentConversationId = null;
-let accounts = [];
-let currentTab = 'buying'; // 'buying' або 'selling'
-let allChats = [];
+const API_BASE_URL = CONFIG.API_BASE_URL || '/api';
 
-// Ініціалізація
+// State
+let state = {
+    currentAccountId: null,
+    currentConversationId: null,
+    accounts: [],
+    chats: [],
+    currentTab: 'buying', // 'buying' | 'selling'
+    pollingInterval: null
+};
+
+// DOM Elements
+const els = {
+    screens: {
+        chatList: document.getElementById('screen-chat-list'),
+        chat: document.getElementById('screen-chat')
+    },
+    drawer: {
+        el: document.getElementById('account-drawer'),
+        overlay: document.getElementById('drawer-overlay'),
+        list: document.getElementById('accounts-list'),
+        closeBtn: document.getElementById('close-drawer-btn')
+    },
+    header: {
+        menuBtn: document.getElementById('menu-btn'),
+        refreshBtn: document.getElementById('refresh-btn'),
+        accountName: document.getElementById('current-account-name')
+    },
+    tabs: document.querySelectorAll('.tab-btn'),
+    chatsContainer: document.getElementById('chats-container'),
+    chat: {
+        backBtn: document.getElementById('back-btn'),
+        respondentName: document.getElementById('chat-respondent-name'),
+        adTitle: document.getElementById('chat-ad-title'),
+        messagesList: document.getElementById('messages-list'),
+        input: document.getElementById('message-input'),
+        sendBtn: document.getElementById('send-btn')
+    }
+};
+
+// Initialization
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Міні-додаток завантажується...');
-    
-    // Налаштування обробників подій
     setupEventListeners();
-    
-    // Завантажуємо аккаунти
     await loadAccounts();
+
+    // Telegram WebApp setup
+    if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+    }
 });
 
-// Налаштування обробників подій
 function setupEventListeners() {
-    // Вкладки
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    // Drawer
+    els.header.menuBtn.addEventListener('click', openDrawer);
+    els.drawer.closeBtn.addEventListener('click', closeDrawer);
+    els.drawer.overlay.addEventListener('click', closeDrawer);
+
+    // Tabs
+    els.tabs.forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const tab = e.currentTarget.dataset.tab;
-            switchTab(tab);
+            els.tabs.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            state.currentTab = e.target.dataset.tab;
+            renderChats();
         });
     });
-    
-    // Кнопка назад
-    document.getElementById('back-btn').addEventListener('click', () => {
-        showChatsList();
+
+    // Chat Navigation
+    els.chat.backBtn.addEventListener('click', () => {
+        showScreen('chatList');
+        state.currentConversationId = null;
+        stopPolling();
+    });
+
+    // Sending Messages
+    els.chat.sendBtn.addEventListener('click', sendMessage);
+    els.chat.input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') sendMessage();
+    });
+
+    // Refresh
+    els.header.refreshBtn.addEventListener('click', () => {
+        if (state.currentAccountId) loadChats(state.currentAccountId);
     });
 }
 
-// Перемикання вкладок
-function switchTab(tab) {
-    currentTab = tab;
-    
-    // Оновлюємо активну вкладку
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        if (btn.dataset.tab === tab) {
-            btn.classList.add('active');
-        } else {
-            btn.classList.remove('active');
-        }
-    });
-    
-    // Фільтруємо та відображаємо чати
-    filterAndDisplayChats();
+// Navigation
+function showScreen(screenName) {
+    Object.values(els.screens).forEach(el => el.classList.remove('active'));
+    els.screens[screenName].classList.add('active');
 }
 
-// Фільтрація та відображення чатів
-function filterAndDisplayChats() {
-    // Поки що показуємо всі чати (потім можна додати фільтрацію по my_ads)
-    displayChatsList(allChats);
+function openDrawer() {
+    els.drawer.el.classList.add('open');
+    els.drawer.overlay.classList.add('open');
 }
 
-// Завантаження списку аккаунтів
+function closeDrawer() {
+    els.drawer.el.classList.remove('open');
+    els.drawer.overlay.classList.remove('open');
+}
+
+// API Calls
+async function apiCall(endpoint, method = 'GET', body = null) {
+    const headers = { 'Content-Type': 'application/json' };
+    const initData = CONFIG.getInitData();
+    if (initData) headers['X-Telegram-Init-Data'] = initData;
+
+    try {
+        const options = { method, headers };
+        if (body) options.body = JSON.stringify(body);
+
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } catch (error) {
+        console.error('API Error:', error);
+        // alert('Помилка з\'єднання: ' + error.message);
+        return null;
+    }
+}
+
+// Logic
 async function loadAccounts() {
-    try {
-        showLoading();
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/accounts`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': CONFIG.getInitData()
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-        }
-        
-        accounts = await response.json();
-        
-        // Автоматично вибираємо перший аккаунт
-        if (accounts.length > 0) {
-            currentAccountId = accounts[0].id;
-            await loadChats(currentAccountId);
-        } else {
-            showError('Не знайдено активних аккаунтів');
-        }
-        
-    } catch (error) {
-        console.error('Помилка завантаження аккаунтів:', error);
-        showError(`Помилка завантаження аккаунтів: ${error.message}`);
-    }
-}
-
-// Завантаження списку чатів
-async function loadChats(accountId) {
-    if (!accountId) {
-        showError('Виберіть аккаунт');
-        return;
-    }
-    
-    try {
-        showLoading();
-        currentConversationId = null;
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/chats?account_id=${accountId}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': CONFIG.getInitData()
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-        }
-        
-        const data = await response.json();
-        allChats = data.chats || [];
-        
-        // Відображаємо список чатів
-        filterAndDisplayChats();
-        showChatsList();
-        
-    } catch (error) {
-        console.error('Помилка завантаження чатів:', error);
-        showError(`Помилка завантаження чатів: ${error.message}`);
-    }
-}
-
-// Відображення списку чатів
-function displayChatsList(chats) {
-    const container = document.getElementById('chats-list');
-    container.innerHTML = '';
-    
-    if (chats.length === 0) {
-        container.innerHTML = '<div style="padding: 40px 20px; text-align: center; color: #7f9799;">Немає чатів</div>';
-        return;
-    }
-    
-    // Сортуємо чати: спочатку непрочитані
-    const sortedChats = [...chats].sort((a, b) => {
-        if (a.unread_count > 0 && b.unread_count === 0) return -1;
-        if (a.unread_count === 0 && b.unread_count > 0) return 1;
-        return 0;
-    });
-    
-    sortedChats.forEach(chat => {
-        const chatItem = createChatItem(chat);
-        container.appendChild(chatItem);
-    });
-}
-
-// Створення елемента чату
-function createChatItem(chat) {
-    const item = document.createElement('div');
-    item.className = 'chat-item';
-    if (chat.unread_count > 0) {
-        item.classList.add('unread');
-    }
-    
-    // Аватар (може бути фото товару)
-    const avatar = document.createElement('div');
-    avatar.className = 'chat-avatar';
-    const name = chat.respondent_name || chat.ad_title || '?';
-    avatar.textContent = name.charAt(0).toUpperCase();
-    
-    // Контент
-    const content = document.createElement('div');
-    content.className = 'chat-content';
-    
-    // Заголовок
-    const headerRow = document.createElement('div');
-    headerRow.className = 'chat-header-row';
-    
-    const nameEl = document.createElement('div');
-    nameEl.className = 'chat-name';
-    nameEl.textContent = chat.respondent_name || 'Невідомий';
-    
-    const timeEl = document.createElement('div');
-    timeEl.className = 'chat-time';
-    if (chat.last_activity_at) {
-        timeEl.textContent = formatDate(chat.last_activity_at);
-    }
-    
-    headerRow.appendChild(nameEl);
-    headerRow.appendChild(timeEl);
-    
-    // Прев'ю (назва товару)
-    const preview = document.createElement('div');
-    preview.className = 'chat-preview';
-    preview.textContent = chat.ad_title || 'Без назви';
-    
-    content.appendChild(headerRow);
-    content.appendChild(preview);
-    
-    // Права частина (закладка)
-    const rightSide = document.createElement('div');
-    rightSide.className = 'chat-item-right';
-    
-    const bookmark = document.createElement('button');
-    bookmark.className = 'chat-bookmark';
-    bookmark.innerHTML = '🔖';
-    bookmark.onclick = (e) => {
-        e.stopPropagation();
-        // TODO: Додати логіку закладки
-    };
-    
-    rightSide.appendChild(bookmark);
-    
-    item.appendChild(avatar);
-    item.appendChild(content);
-    item.appendChild(rightSide);
-    
-    // Обробник кліку
-    item.addEventListener('click', () => {
-        loadChat(currentAccountId, chat.conversation_id);
-    });
-    
-    return item;
-}
-
-// Завантаження конкретного чату
-async function loadChat(accountId, conversationId) {
-    if (!accountId || !conversationId) {
-        showError('Не вказано account_id або conversation_id');
-        return;
-    }
-    
-    try {
-        showLoading();
-        currentConversationId = conversationId;
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/chat?account_id=${accountId}&conversation_id=${conversationId}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': CONFIG.getInitData()
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-        }
-        
-        const data = await response.json();
-        const chat = data.chat || {};
-        const messages = data.messages || [];
-        
-        // Відображаємо чат
-        displayChat(chat, messages);
-        showChatView();
-        
-    } catch (error) {
-        console.error('Помилка завантаження чату:', error);
-        showError(`Помилка завантаження чату: ${error.message}`);
-    }
-}
-
-// Відображення чату
-function displayChat(chat, messages) {
-    // Заголовок
-    const respondentName = chat.respondent_name || 'Невідомий';
-    document.getElementById('chat-title').textContent = respondentName;
-    document.getElementById('chat-subtitle').textContent = chat.ad_title || 'Без назви';
-    
-    // Аватар в заголовку
-    const avatarText = document.getElementById('chat-avatar-text');
-    avatarText.textContent = respondentName.charAt(0).toUpperCase();
-    
-    // Інформація про товар
-    const productInfo = document.getElementById('product-info');
-    if (chat.ad_title) {
-        document.getElementById('product-title').textContent = chat.ad_title;
-        // TODO: Додати реальну ціну та ID з API
-        document.getElementById('product-price').textContent = 'Ціна не вказана';
-        document.getElementById('product-id').textContent = '';
-        productInfo.style.display = 'block';
+    const accounts = await apiCall('/accounts');
+    if (accounts && accounts.length > 0) {
+        state.accounts = accounts;
+        renderAccountsList();
+        selectAccount(accounts[0].id);
     } else {
-        productInfo.style.display = 'none';
+        els.chatsContainer.innerHTML = '<div style="text-align:center; padding:20px;">Немає доступних акаунтів</div>';
     }
-    
-    // Повідомлення
-    const container = document.getElementById('messages-container');
-    container.innerHTML = '';
-    
-    if (messages.length === 0) {
-        container.innerHTML = '<div style="padding: 40px 20px; text-align: center; color: #7f9799;">Немає повідомлень</div>';
+}
+
+function renderAccountsList() {
+    els.drawer.list.innerHTML = '';
+    state.accounts.forEach(acc => {
+        const item = document.createElement('div');
+        item.className = `account-item ${state.currentAccountId === acc.id ? 'active' : ''}`;
+        item.innerHTML = `
+            <div class="account-avatar">${acc.profile_name ? acc.profile_name[0].toUpperCase() : 'A'}</div>
+            <div class="account-info">
+                <div class="account-name">${acc.profile_name || 'Акаунт ' + acc.id}</div>
+                <div class="account-status">${acc.account_status}</div>
+            </div>
+        `;
+        item.addEventListener('click', () => {
+            selectAccount(acc.id);
+            closeDrawer();
+        });
+        els.drawer.list.appendChild(item);
+    });
+}
+
+async function selectAccount(accountId) {
+    state.currentAccountId = accountId;
+    const account = state.accounts.find(a => a.id === accountId);
+    if (account) {
+        els.header.accountName.textContent = account.profile_name || `Акаунт ${account.id}`;
+    }
+    renderAccountsList(); // Update active state
+    await loadChats(accountId);
+}
+
+async function loadChats(accountId) {
+    els.chatsContainer.innerHTML = '<div class="loading-spinner"></div>';
+    const data = await apiCall(`/chats?account_id=${accountId}`);
+    if (data && data.chats) {
+        state.chats = data.chats;
+        renderChats();
+    } else {
+        els.chatsContainer.innerHTML = '<div style="text-align:center; padding:20px;">Помилка завантаження чатів</div>';
+    }
+}
+
+function renderChats() {
+    els.chatsContainer.innerHTML = '';
+
+    // Filter chats based on tab
+    // Note: We don't have a perfect way to distinguish buying/selling yet from the API
+    // For now, we show all chats in both tabs, or we could try to filter if we had the data.
+    // Let's assume for now we show all, but in future we will filter.
+    // TODO: Implement proper filtering when backend supports it.
+
+    const filteredChats = state.chats; // .filter(...) 
+
+    if (filteredChats.length === 0) {
+        els.chatsContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#999;">Чатів немає</div>';
         return;
     }
-    
-    // Групуємо повідомлення по датах
-    let currentDate = null;
-    messages.forEach(message => {
-        const messageDate = new Date(message.created_at);
-        const dateStr = formatDateForSeparator(messageDate);
-        
-        // Додаємо роздільник дати якщо потрібно
-        if (currentDate !== dateStr) {
-            const separator = document.createElement('div');
-            separator.className = 'date-separator';
-            separator.textContent = dateStr;
-            container.appendChild(separator);
-            currentDate = dateStr;
-        }
-        
-        const messageEl = createMessageElement(message);
-        container.appendChild(messageEl);
+
+    filteredChats.forEach(chat => {
+        const card = document.createElement('div');
+        card.className = 'chat-card';
+        card.innerHTML = `
+            <div class="chat-avatar">${chat.respondent_name ? chat.respondent_name[0].toUpperCase() : '?'}</div>
+            <div class="chat-details">
+                <div class="chat-top-row">
+                    <span class="chat-name">${chat.respondent_name || 'Невідомий'}</span>
+                    <span class="chat-time">${formatDate(chat.last_activity_at)}</span>
+                </div>
+                <div class="chat-ad-title">${chat.ad_title || 'Оголошення'}</div>
+                <div class="chat-last-msg">Натисніть щоб відкрити...</div> 
+            </div>
+        `;
+        card.addEventListener('click', () => openChat(chat));
+        els.chatsContainer.appendChild(card);
     });
-    
-    // Прокручуємо до останнього повідомлення
+}
+
+async function openChat(chat) {
+    state.currentConversationId = chat.conversation_id;
+    els.chat.respondentName.textContent = chat.respondent_name || 'Невідомий';
+    els.chat.adTitle.textContent = chat.ad_title || 'Оголошення';
+    els.chat.messagesList.innerHTML = '<div class="loading-spinner"></div>';
+
+    showScreen('chat');
+
+    await loadMessages(chat.conversation_id);
+    startPolling();
+}
+
+async function loadMessages(conversationId) {
+    if (state.currentConversationId !== conversationId) return;
+
+    const data = await apiCall(`/chat?account_id=${state.currentAccountId}&conversation_id=${conversationId}`);
+    if (data && data.messages) {
+        renderMessages(data.messages);
+    }
+}
+
+function renderMessages(messages) {
+    const container = els.chat.messagesList;
+    container.innerHTML = '';
+
+    messages.forEach(msg => {
+        const bubble = document.createElement('div');
+        const isOutgoing = msg.is_outgoing || msg.direction === 'outgoing';
+        bubble.className = `message-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
+        bubble.innerHTML = `
+            ${msg.text}
+            <div class="message-time">${formatTime(msg.created_at)}</div>
+        `;
+        container.appendChild(bubble);
+    });
+
+    // Scroll to bottom
     container.scrollTop = container.scrollHeight;
 }
 
-// Створення елемента повідомлення
-function createMessageElement(message) {
-    const messageDiv = document.createElement('div');
-    messageDiv.className = 'message';
-    
-    // Визначаємо напрямок
-    const isIncoming = message.direction === 'incoming' || !message.is_outgoing;
-    messageDiv.classList.add(isIncoming ? 'incoming' : 'outgoing');
-    
-    // Буба
+async function sendMessage() {
+    const text = els.chat.input.value.trim();
+    if (!text || !state.currentAccountId || !state.currentConversationId) return;
+
+    // Optimistic UI update
+    const tempMsg = {
+        text: text,
+        created_at: new Date().toISOString(),
+        is_outgoing: true,
+        direction: 'outgoing'
+    };
+
     const bubble = document.createElement('div');
-    bubble.className = 'message-bubble';
-    bubble.textContent = message.text || '(пусте повідомлення)';
-    
-    // Час та статус
-    const time = document.createElement('div');
-    time.className = 'message-time';
-    if (message.created_at) {
-        const timeStr = formatTime(message.created_at);
-        time.innerHTML = timeStr;
-        if (!isIncoming) {
-            // Додаємо статус прочитання (галочки)
-            time.innerHTML += ' <span class="message-status">✓✓</span>';
-        }
+    bubble.className = 'message-bubble outgoing';
+    bubble.style.opacity = '0.7'; // Pending state
+    bubble.innerHTML = `
+        ${text}
+        <div class="message-time">${formatTime(tempMsg.created_at)}</div>
+    `;
+    els.chat.messagesList.appendChild(bubble);
+    els.chat.messagesList.scrollTop = els.chat.messagesList.scrollHeight;
+    els.chat.input.value = '';
+
+    // Send API request
+    const result = await apiCall('/send_message', 'POST', {
+        account_id: state.currentAccountId,
+        conversation_id: state.currentConversationId,
+        text: text
+    });
+
+    if (result && result.success) {
+        bubble.style.opacity = '1';
+        // Reload messages to get the real state
+        await loadMessages(state.currentConversationId);
+    } else {
+        bubble.style.backgroundColor = '#ffdddd'; // Error state
+        alert('Помилка відправки повідомлення');
     }
-    
-    messageDiv.appendChild(bubble);
-    messageDiv.appendChild(time);
-    
-    return messageDiv;
 }
 
-// Форматування дати для списку чатів
-function formatDate(timestamp) {
-    if (!timestamp) return '';
-    
-    const date = new Date(timestamp);
+// Helpers
+function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
     const now = new Date();
-    const diff = now - date;
-    
-    // Сьогодні
-    if (diff < 24 * 60 * 60 * 1000 && date.getDate() === now.getDate()) {
+    if (date.toDateString() === now.toDateString()) {
         return date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
     }
-    
-    // Вчора
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (date.getDate() === yesterday.getDate()) {
-        return 'Вчора';
-    }
-    
-    // Старіше - формат ДД.ММ
     return date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
 }
 
-// Форматування дати для роздільника
-function formatDateForSeparator(date) {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    
-    if (messageDate.getTime() === today.getTime()) {
-        return 'СЬОГОДНІ';
+function formatTime(dateStr) {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+}
+
+function startPolling() {
+    stopPolling();
+    state.pollingInterval = setInterval(() => {
+        if (state.currentConversationId) {
+            loadMessages(state.currentConversationId);
+        }
+    }, 5000); // Poll every 5 seconds
+}
+
+function stopPolling() {
+    if (state.pollingInterval) {
+        clearInterval(state.pollingInterval);
+        state.pollingInterval = null;
     }
-    
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (messageDate.getTime() === yesterday.getTime()) {
-        return 'ВЧОРА';
-    }
-    
-    // Формат: "24 ЛИСТ."
-    const months = ['СІЧ', 'ЛЮТ', 'БЕР', 'КВІ', 'ТРА', 'ЧЕР', 'ЛИП', 'СЕР', 'ВЕР', 'ЖОВ', 'ЛИС', 'ГРУ'];
-    return `${date.getDate()} ${months[date.getMonth()]}.`;
-}
-
-// Форматування часу
-function formatTime(timestamp) {
-    if (!timestamp) return '';
-    
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-}
-
-// Показ завантаження
-function showLoading() {
-    document.getElementById('loading').style.display = 'flex';
-    document.getElementById('error').style.display = 'none';
-    document.getElementById('chats-list').style.display = 'none';
-    document.getElementById('chats-view').style.display = 'none';
-    document.getElementById('chat-view').style.display = 'none';
-}
-
-// Показ помилки
-function showError(message) {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error').style.display = 'block';
-    document.getElementById('error-text').textContent = message;
-    document.getElementById('chats-list').style.display = 'none';
-    document.getElementById('chats-view').style.display = 'none';
-    document.getElementById('chat-view').style.display = 'none';
-}
-
-// Показ списку чатів
-function showChatsList() {
-    currentConversationId = null;
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error').style.display = 'none';
-    document.getElementById('chats-list').style.display = 'block';
-    document.getElementById('chats-view').style.display = 'block';
-    document.getElementById('chat-view').style.display = 'none';
-}
-
-// Показ екрану чату
-function showChatView() {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error').style.display = 'none';
-    document.getElementById('chats-list').style.display = 'none';
-    document.getElementById('chats-view').style.display = 'none';
-    document.getElementById('chat-view').style.display = 'flex';
 }
