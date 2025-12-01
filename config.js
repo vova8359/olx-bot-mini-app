@@ -3,7 +3,9 @@ const CONFIG = {
     // URL API - замініть на URL вашого API сервера
     // Для локального тестування: 'http://localhost:8080'
     // Для продакшн: 'https://your-api-domain.com'
-    API_BASE_URL: window.location.origin + '/api',
+    // Якщо API на тому ж сервері що й бот, використовуйте: 'http://YOUR_SERVER_IP:8080'
+    // ВАЖЛИВО: Замініть localhost на IP адресу або домен вашого сервера, де працює бот!
+    API_BASE_URL: 'http://localhost:8080',
     
     // Налаштування Telegram Web App
     tg: null,
