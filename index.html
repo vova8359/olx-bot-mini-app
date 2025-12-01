@@ -2,104 +2,84 @@
 <html lang="uk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>OLX Чати</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OLX Повідомлення</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-container">
-        <!-- Вибір аккаунта (приховано за замовчуванням) -->
-        <div class="account-selector" id="account-selector" style="display: none;">
-            <select id="account-select">
-                <option value="">Завантаження...</option>
-            </select>
+        <!-- Sidebar / Drawer for Accounts -->
+        <div id="account-drawer" class="account-drawer">
+            <div class="drawer-header">
+                <h2>Мої акаунти</h2>
+                <button id="close-drawer-btn" class="icon-btn">✕</button>
+            </div>
+            <div id="accounts-list" class="accounts-list">
+                <!-- Accounts will be loaded here -->
+            </div>
         </div>
+        <div id="drawer-overlay" class="drawer-overlay"></div>
 
-        <!-- Список чатів -->
-        <div id="chats-view" class="chats-view">
-            <!-- Вкладки -->
-            <div class="tabs-container">
-                <button class="tab-btn active" data-tab="buying">
-                    Купую
-                    <span class="tab-badge" id="buying-badge" style="display: none;"></span>
+        <!-- Main Screen: Chat List -->
+        <div id="screen-chat-list" class="screen active">
+            <header class="main-header">
+                <button id="menu-btn" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
                 </button>
-                <button class="tab-btn" data-tab="selling">
-                    Продаю
-                    <span class="tab-badge" id="selling-badge" style="display: none;"></span>
-                </button>
+                <div class="header-title">
+                    <span id="current-account-name">Завантаження...</span>
+                    <span id="current-account-status" class="status-dot"></span>
+                </div>
+                <div class="header-actions">
+                    <button id="refresh-btn" class="icon-btn">↻</button>
+                </div>
+            </header>
+
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="buying">Купую</button>
+                <button class="tab-btn" data-tab="selling">Продаю</button>
             </div>
 
-            <!-- Заголовок секції -->
-            <div class="section-header" id="section-header">
-                <h2>НЕПРОЧИТАНІ</h2>
-            </div>
-
-            <!-- Статус завантаження -->
-            <div id="loading" class="loading">
-                <div class="spinner"></div>
-                <p>Завантаження чатів...</p>
-            </div>
-
-            <!-- Помилка -->
-            <div id="error" class="error-message" style="display: none;">
-                <p id="error-text"></p>
-                <button onclick="location.reload()">Спробувати ще раз</button>
-            </div>
-
-            <!-- Список чатів -->
-            <div id="chats-list" class="chats-list" style="display: none;">
-                <!-- Чати будуть додані динамічно -->
+            <div id="chats-container" class="chats-container">
+                <div class="loading-spinner"></div>
             </div>
         </div>
 
-        <!-- Екран чату -->
-        <div id="chat-view" class="chat-view" style="display: none;">
-            <div class="chat-header">
-                <button id="back-btn" class="back-btn">←</button>
+        <!-- Chat Screen -->
+        <div id="screen-chat" class="screen">
+            <header class="chat-header">
+                <button id="back-btn" class="icon-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 12H5M12 19l-7-7 7-7"/>
+                    </svg>
+                </button>
                 <div class="chat-header-info">
-                    <div class="chat-avatar-small">
-                        <span id="chat-avatar-text"></span>
-                    </div>
-                    <div class="chat-info">
-                        <h2 id="chat-title">Чат</h2>
-                        <p id="chat-subtitle"></p>
-                    </div>
+                    <h3 id="chat-respondent-name">Ім'я</h3>
+                    <p id="chat-ad-title">Назва оголошення</p>
                 </div>
                 <div class="chat-header-actions">
-                    <button class="header-icon-btn" title="Закладка">🔖</button>
-                    <button class="header-icon-btn" title="Блокувати">🚫</button>
-                    <button class="header-icon-btn" title="Скарга">🚩</button>
-                    <button class="header-icon-btn" title="Видалити">🗑️</button>
+                    <button class="icon-btn">⋮</button>
                 </div>
+            </header>
+
+            <div id="messages-list" class="messages-list">
+                <!-- Messages will be loaded here -->
             </div>
 
-            <!-- Інформація про товар -->
-            <div id="product-info" class="product-info" style="display: none;">
-                <div class="product-content">
-                    <img id="product-image" src="" alt="Товар" class="product-image">
-                    <div class="product-details">
-                        <h3 id="product-title"></h3>
-                        <p class="product-price" id="product-price"></p>
-                        <p class="product-id" id="product-id"></p>
-                    </div>
-                </div>
-                <button class="buy-delivery-btn">
-                    <span>🚚</span>
-                    Купити з доставкою
+            <div class="message-input-area">
+                <input type="text" id="message-input" placeholder="Напишіть повідомлення..." autocomplete="off">
+                <button id="send-btn" class="send-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
                 </button>
-            </div>
-
-            <!-- Контейнер повідомлень -->
-            <div id="messages-container" class="messages-container">
-                <!-- Повідомлення будуть додані динамічно -->
-            </div>
-
-            <!-- Поле вводу (поки приховано) -->
-            <div class="message-input-container" style="display: none;">
-                <button class="input-icon-btn">📷</button>
-                <button class="input-icon-btn">📎</button>
-                <input type="text" class="message-input" placeholder="Напишіть повідомлення..." disabled>
             </div>
         </div>
     </div>
