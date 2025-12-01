@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>OLX Чати</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Вибір аккаунта (приховано за замовчуванням) -->
+        <div class="account-selector" id="account-selector" style="display: none;">
+            <select id="account-select">
+                <option value="">Завантаження...</option>
+            </select>
+        </div>
+
+        <!-- Список чатів -->
+        <div id="chats-view" class="chats-view">
+            <!-- Вкладки -->
+            <div class="tabs-container">
+                <button class="tab-btn active" data-tab="buying">
+                    Купую
+                    <span class="tab-badge" id="buying-badge" style="display: none;"></span>
+                </button>
+                <button class="tab-btn" data-tab="selling">
+                    Продаю
+                    <span class="tab-badge" id="selling-badge" style="display: none;"></span>
+                </button>
+            </div>
+
+            <!-- Заголовок секції -->
+            <div class="section-header" id="section-header">
+                <h2>НЕПРОЧИТАНІ</h2>
+            </div>
+
+            <!-- Статус завантаження -->
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Завантаження чатів...</p>
+            </div>
+
+            <!-- Помилка -->
+            <div id="error" class="error-message" style="display: none;">
+                <p id="error-text"></p>
+                <button onclick="location.reload()">Спробувати ще раз</button>
+            </div>
+
+            <!-- Список чатів -->
+            <div id="chats-list" class="chats-list" style="display: none;">
+                <!-- Чати будуть додані динамічно -->
+            </div>
+        </div>
+
+        <!-- Екран чату -->
+        <div id="chat-view" class="chat-view" style="display: none;">
+            <div class="chat-header">
+                <button id="back-btn" class="back-btn">←</button>
+                <div class="chat-header-info">
+                    <div class="chat-avatar-small">
+                        <span id="chat-avatar-text"></span>
+                    </div>
+                    <div class="chat-info">
+                        <h2 id="chat-title">Чат</h2>
+                        <p id="chat-subtitle"></p>
+                    </div>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="header-icon-btn" title="Закладка">🔖</button>
+                    <button class="header-icon-btn" title="Блокувати">🚫</button>
+                    <button class="header-icon-btn" title="Скарга">🚩</button>
+                    <button class="header-icon-btn" title="Видалити">🗑️</button>
+                </div>
+            </div>
+
+            <!-- Інформація про товар -->
+            <div id="product-info" class="product-info" style="display: none;">
+                <div class="product-content">
+                    <img id="product-image" src="" alt="Товар" class="product-image">
+                    <div class="product-details">
+                        <h3 id="product-title"></h3>
+                        <p class="product-price" id="product-price"></p>
+                        <p class="product-id" id="product-id"></p>
+                    </div>
+                </div>
+                <button class="buy-delivery-btn">
+                    <span>🚚</span>
+                    Купити з доставкою
+                </button>
+            </div>
+
+            <!-- Контейнер повідомлень -->
+            <div id="messages-container" class="messages-container">
+                <!-- Повідомлення будуть додані динамічно -->
+            </div>
+
+            <!-- Поле вводу (поки приховано) -->
+            <div class="message-input-container" style="display: none;">
+                <button class="input-icon-btn">📷</button>
+                <button class="input-icon-btn">📎</button>
+                <input type="text" class="message-input" placeholder="Напишіть повідомлення..." disabled>
+            </div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
