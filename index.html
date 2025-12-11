@@ -5,7 +5,10 @@
     <meta http-equiv="refresh" content="0; url=увійти.html">
     <title>Перенаправлення...</title>
     <script>
-        window.location.href = "увійти.html";
+        // Миттєве перенаправлення
+        if (window.location.pathname === '/' || window.location.pathname === '/index.html') {
+            window.location.replace('увійти.html');
+        }
     </script>
 </head>
 <body>
