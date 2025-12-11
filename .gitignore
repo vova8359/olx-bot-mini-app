@@ -1,0 +1,33 @@
+# Секрети та конфігурація
+.env
+*.env
+key.env
+config/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Логи
+*.log
+logs/
+
+# Дані користувачів
+storage/
+tokens/
+*.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.cursor/
+
+# OS
+.DS_Store
+Thumbs.db
+
